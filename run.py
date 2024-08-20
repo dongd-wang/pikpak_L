@@ -1,6 +1,7 @@
 import json
 import hashlib
 import os
+import random
 import re
 import time
 import asyncio
@@ -360,13 +361,18 @@ async def verification(captcha_token, xid, mail):
         'x-provider-name': 'NONE',
         'x-sdk-version': '6.0.0'
     }
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=body, headers=headers, ssl=False, proxy=PROXY) as response:
-            response_data = await response.json()
-            if DEBUG_MODE:
-                print('发送验证码:')
-                print_json(json.dumps(response_data, indent=4))
-            return response_data
+    retries = 10
+    while retries:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=body, headers=headers, ssl=False, proxy=PROXY) as response:
+                response_data = await response.json()
+                if DEBUG_MODE:
+                    print('发送验证码:')
+                    print_json(json.dumps(response_data, indent=4))
+                if response_data['error'] != 'captcha_invalid':
+                    return response_data
+                time.sleep(random.randint(1, 3))
+                retries -= 1
 
 
 async def verify(xid, verification_id, code):
