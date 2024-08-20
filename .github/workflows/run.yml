@@ -25,6 +25,6 @@ jobs:
       - name: Run
         env:
           INVITE_CODE: ${{secrets.INVITE_CODE}}
-          BARK_URL: ${{env.BARK_URL}}
-          BARK_TOKEN: ${{env.BARK_TOKEN}}
+          BARK_URL: ${{secrets.BARK_URL}}
+          BARK_TOKEN: ${{secrets.BARK_TOKEN}}
         run: python run.py
