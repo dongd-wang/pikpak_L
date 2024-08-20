@@ -15,7 +15,7 @@ from rich import print_json
 DEBUG_MODE = False  # Debug模式，是否打印请求返回信息
 # PROXY = input('请输入代理，如不需要直接回车:')  # 代理，如果多次出现IP问题可尝试将自己所用的魔法设置为代理。例如：使用clash则设置为 'http://127.0.0.1:7890'
 PROXY = ''
-PUSHPLUS_TOKEN = os.getenv('PUSHPLUS_TOKEN') or ''
+BARK_TOKEN = os.getenv('BARK_TOKEN') or ''
 INVITE_CODE = os.getenv('INVITE_CODE') or input('请输入邀请码: ')
 PUSH_MSG = ''
 
@@ -23,7 +23,7 @@ PUSH_MSG = ''
 # 检查变量
 def check_env():
     invite_code_list = []
-    if not PUSHPLUS_TOKEN:
+    if not BARK_TOKEN:
         print('请按照文档设置PUSHPLUS_TOKEN环境变量')
     if not INVITE_CODE:
         print('请按照文档设置INVITE_CODE环境变量')
@@ -40,12 +40,16 @@ def check_env():
 
 # 推送
 async def push(content):
-    if PUSHPLUS_TOKEN:
-        url = 'http://www.pushplus.plus/send'
+    if BARK_TOKEN:
+        url = os.environ.get('BARK_URL') + '/push'
         data = {
-            "token": PUSHPLUS_TOKEN,
-            "title": 'PikPak邀请通知',
-            "content": content,
+            "title": "pikpak邀请",
+                    "body": json.dumps(json.loads(content), ensure_ascii=False),
+                    "device_key": BARK_TOKEN,
+                    "badge": 1,
+                    "sound": "minuet.caf",
+                    "icon": "https://day.app/assets/images/avatar.jpg",
+                    "group": "签到",
         }
         headers = {'Content-Type': 'application/json'}
         try:
