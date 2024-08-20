@@ -361,18 +361,15 @@ async def verification(captcha_token, xid, mail):
         'x-provider-name': 'NONE',
         'x-sdk-version': '6.0.0'
     }
-    retries = 10
-    while retries:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=body, headers=headers, ssl=False, proxy=PROXY) as response:
-                response_data = await response.json()
-                if DEBUG_MODE:
-                    print('发送验证码:')
-                    print_json(json.dumps(response_data, indent=4))
-                if response_data['error'] != 'captcha_invalid':
-                    return response_data
-                time.sleep(random.randint(1, 3))
-                retries -= 1
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, json=body, headers=headers, ssl=False, proxy=PROXY) as response:
+            response_data = await response.json()
+            if DEBUG_MODE:
+                print('发送验证码:')
+                print_json(json.dumps(response_data, indent=4))
+            if response_data['error'] != 'captcha_invalid':
+                return response_data, True
+            return response_data, False
 
 
 async def verify(xid, verification_id, code):
@@ -671,8 +668,14 @@ async def main(incode):
                 break
             else:
                 print('验证失败, 重新验证滑块中...')
-        captcha_token_info = await get_new_token(img_info, xid, Init['captcha_token'])
-        verification_id = await verification(captcha_token_info['captcha_token'], xid, mail)
+        retries = 5
+        while retries > 0:
+            captcha_token_info = await get_new_token(img_info, xid, Init['captcha_token'])
+            verification_id, verification_pass = await verification(captcha_token_info['captcha_token'], xid, mail)
+            if verification_pass:
+                break
+            retries -= 1
+            time.sleep(random.randint(1, 5))
         code = await get_code(mail)
         verification_response = await verify(xid, verification_id['verification_id'], code)
         signup_response = await signup(xid, mail, code, verification_response['verification_token'])
