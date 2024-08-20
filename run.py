@@ -44,7 +44,7 @@ async def push(content):
         url = os.environ.get('BARK_URL') + '/push'
         data = {
             "title": "pikpak邀请",
-                    "body": json.dumps(json.loads(content), ensure_ascii=False),
+                    "body": content,
                     "device_key": BARK_TOKEN,
                     "badge": 1,
                     "sound": "minuet.caf",
