@@ -1,138 +1,16 @@
-import json
+from tempmail import EMail
+import requests
 import hashlib
-import os
+import string
 import random
-import re
-import time
-import asyncio
-import aiohttp
+import json
 import uuid
-import image
-import recognize
-from rich import print_json
-
-
-
-DEBUG_MODE = True  # Debug模式，是否打印请求返回信息
-# PROXY = input('请输入代理，如不需要直接回车:')  # 代理，如果多次出现IP问题可尝试将自己所用的魔法设置为代理。例如：使用clash则设置为 'http://127.0.0.1:7890'
-PROXY = ''
-BARK_TOKEN = os.getenv('BARK_TOKEN') or ''
-INVITE_CODE = os.getenv('INVITE_CODE') or input('请输入邀请码: ')
-PUSH_MSG = ''
-
-
-# 检查变量
-def check_env():
-    invite_code_list = []
-    if not BARK_TOKEN:
-        print('请按照文档设置PUSHPLUS_TOKEN环境变量')
-    if not INVITE_CODE:
-        print('请按照文档设置INVITE_CODE环境变量')
-        raise Exception('请按照文档设置INVITE_CODE环境变量')
-    else:
-        if '@' in INVITE_CODE:
-            invite_code_list = INVITE_CODE.split('@')
-        elif '\n' in INVITE_CODE:
-            invite_code_list = INVITE_CODE.split('\n')
-        else:
-            invite_code_list.append(INVITE_CODE)
-        return invite_code_list
-
-
-# 推送
-async def push(content):
-    if BARK_TOKEN:
-        url = os.environ.get('BARK_URL') + '/push'
-        data = {
-            "title": "pikpak邀请",
-                    "body": content,
-                    "device_key": BARK_TOKEN,
-                    "badge": 1,
-                    "sound": "minuet.caf",
-                    "icon": "https://day.app/assets/images/avatar.jpg",
-                    "group": "签到",
-        }
-        headers = {'Content-Type': 'application/json'}
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, headers=headers, data=json.dumps(data)) as response:
-                    response_data = await response.json()
-                    if response_data['code'] == 200:
-                        print('推送成功')
-                    else:
-                        print(f'推送失败，{response_data["msg"]}')
-        except Exception as e:
-            print(e)
-
-
-# 滑块数据加密
-def r(e, t):
-    n = t - 1
-    if n < 0:
-        n = 0
-    r = e[n]
-    u = r["row"] // 2 + 1
-    c = r["column"] // 2 + 1
-    f = r["matrix"][u][c]
-    l = t + 1
-    if l >= len(e):
-        l = t
-    d = e[l]
-    p = l % d["row"]
-    h = l % d["column"]
-    g = d["matrix"][p][h]
-    y = e[t]
-    m = 3 % y["row"]
-    v = 7 % y["column"]
-    w = y["matrix"][m][v]
-    b = i(f) + o(w)
-    x = i(w) - o(f)
-    return [s(a(i(f), o(f))), s(a(i(g), o(g))), s(a(i(w), o(w))), s(a(b, x))]
-
-
-def i(e):
-    return int(e.split(",")[0])
-
-
-def o(e):
-    return int(e.split(",")[1])
-
-
-def a(e, t):
-    return str(e) + "^⁣^" + str(t)
-
-
-def s(e):
-    t = 0
-    n = len(e)
-    for r in range(n):
-        t = u(31 * t + ord(e[r]))
-    return t
-
-
-def u(e):
-    t = -2147483648
-    n = 2147483647
-    if e > n:
-        return t + (e - n) % (n - t + 1) - 1
-    if e < t:
-        return n - (t - e) % (n - t + 1) + 1
-    return e
-
-
-def c(e, t):
-    return s(e + "⁣" + str(t))
-
-
-def img_jj(e, t, n):
-    return {"ca": r(e, t), "f": c(n, t)}
-
-
+import time
+import re
+import os
 def md5(input_string):
     return hashlib.md5(input_string.encode()).hexdigest()
-
-
-async def get_sign(xid, t):
+def get_sign(xid, t):
     e = [
         {"alg": "md5", "salt": "KHBJ07an7ROXDoK7Db"},
         {"alg": "md5", "salt": "G6n399rSWkl7WcQmw5rpQInurc1DkLmLJqE"},
@@ -150,45 +28,9 @@ async def get_sign(xid, t):
         md5_hash += item["salt"]
         md5_hash = md5(md5_hash)
     return md5_hash
-
-
-async def get_mail():
-    json_data = {
-        "min_name_length": 10,
-        "max_name_length": 10
-    }
-    url = 'https://api.internal.temp-mail.io/api/v3/email/new'
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=json_data, ssl=False) as response:
-            response_data = await response.json()
-            mail = response_data['email']
-        return mail
-
-
-# 获取邮箱的验证码内容
-async def get_code(mail, max_retries=10, delay=1):
-    retries = 0
-    while retries < max_retries:
-        url = f'https://api.internal.temp-mail.io/api/v3/email/{mail}/messages'
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, ssl=False) as response:
-                html = await response.json()
-                if html:
-                    text = (html[0])['body_text']
-                    code = re.search('\\d{6}', text).group()
-                    print(f'获取邮箱验证码:{code}')
-                    return code
-                else:
-                    print(f"{retries}: {html}, delay: {2*delay}")
-                    time.sleep(2*delay)
-                    delay += 1
-                    retries += 1
-    print(f"获取邮箱邮件内容失败，未收到邮件... {mail}")
-    return None
-
-
-async def init(xid, mail):
-    url = 'https://user.mypikpak.com/v1/shield/captcha/init'
+# 网络请求函数
+def init(xid, mail, change_ip):
+    url = 'http://user.mypikpak.com/v1/shield/captcha/init'
     body = {
         "client_id": "YvtoWO6GNHiuCl7x",
         "action": "POST:/v1/auth/verification",
@@ -225,105 +67,30 @@ async def init(xid, mail):
         'x-platform-version': '1',
         'x-protocol-version': '301',
         'x-provider-name': 'NONE',
-        'x-sdk-version': '6.0.0'
+        'x-sdk-version': '6.0.0',
+        'X-Forwarded-For': str(change_ip)
     }
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=body, headers=headers, ssl=False, proxy=PROXY) as response:
-            response_data = await response.json()
-            if 'url' in response_data:
-                if DEBUG_MODE:
-                    print('初始安全验证:')
-                    print_json(json.dumps(response_data, indent=4))
-                return response_data
-            else:
-                global PUSH_MSG
-                PUSH_MSG += f'IP频繁，请一段时间后再试!!!\n'
-                raise print('IP频繁,请更换IP或者稍后再试!!!\n', response_data['error_description'])
-
-
-async def get_image(xid):
-    url = "https://user.mypikpak.com/pzzl/gen"
-    params = {
-        "deviceid": xid,
-        "traceid": ""
-    }
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, params=params, ssl=False, proxy=PROXY) as response:
-            imgs_json = await response.json()
-            frames = imgs_json["frames"]
-            pid = imgs_json['pid']
-            traceid = imgs_json['traceid']
-            if DEBUG_MODE:
-                print('滑块ID:')
-                print_json(json.dumps(pid, indent=4))
-            params = {
-                'deviceid': xid,
-                'pid': pid,
-                'traceid': traceid
-            }
-            async with session.get(f"https://user.mypikpak.com/pzzl/image", params=params, ssl=False,
-                                   proxy=PROXY) as response1:
-                img_data = await response1.read()
-                # 保存初始图片
-                save_image(img_data, f'temp/1.png')
-                # 保存拼图图片
-                image.run(f'temp/1.png', frames)
-                # 识别图片
-                select_id = recognize.run()
-                # 删除缓存图片
-                # image.delete_img()
-            json_data = img_jj(frames, int(select_id), pid)
-            f = json_data['f']
-            npac = json_data['ca']
-            d_request_data = {
-                "pid": pid,
-                "device_id": xid,
-                "f": f
-            }
-            async with session.post(f"https://paperkiteidleplus.top/document/pikpak/hash.php", json=d_request_data, ssl=False) as response1:
-                response_data = await response1.json()
-                d = response_data['d']
-            params = {
-                'pid': pid,
-                'deviceid': xid,
-                'traceid': traceid,
-                'f': f,
-                'n': npac[0],
-                'p': npac[1],
-                'a': npac[2],
-                'c': npac[3],
-                'd': d
-            }
-            async with session.get(f"https://user.mypikpak.com/pzzl/verify", params=params, ssl=False,
-                                   proxy=PROXY) as response2:
-                response_data = await response2.json()
-            result = {'pid': pid, 'traceid': traceid, 'response_data': response_data}
-            return result
-
-
-def save_image(img_data, img_path):
-    if not os.path.exists(os.path.dirname(img_path)):
-        os.makedirs(os.path.dirname(img_path))
-    with open(img_path, "wb") as f:
-        f.write(img_data)
-
-
-async def get_new_token(result, xid, captcha):
+    response = requests.post(url, json=body, headers=headers)
+    print(response.text)
+    response_data = response.json()
+    if 'url' in response_data:
+        print('初始安全验证中......')
+        return response_data
+    else:
+        print('邮箱或者IP频繁,请更换IP或者稍后重试......')
+        raise Exception(response_data.get('error_description', 'Unknown error'))
+def get_new_token(result, xid, captcha, change_ip):
     traceid = result['traceid']
     pid = result['pid']
-    async with aiohttp.ClientSession() as session:
-        async with session.get(
-                f"https://user.mypikpak.com/credit/v1/report?deviceid={xid}&captcha_token={captcha}&type"
-                f"=pzzlSlider&result=0&data={pid}&traceid={traceid}", ssl=False, proxy=PROXY) as response2:
-            response_data = await response2.json()
-            if DEBUG_MODE:
-                print('获取验证TOKEN:')
-                print_json(json.dumps(response_data, indent=4))
-            return response_data
-
-
-async def verification(captcha_token, xid, mail):
-    url = 'https://user.mypikpak.com/v1/auth/verification'
+    header = {'X-Forwarded-For': str(change_ip)}
+    response2 = requests.get(
+        f"http://user.mypikpak.com/credit/v1/report?deviceid={xid}&captcha_token={captcha}&type"
+        f"=pzzlSlider&result=0&data={pid}&traceid={traceid}", headers=header)
+    response_data = response2.json()
+    print('获取验证TOKEN中......')
+    return response_data
+def verification(captcha_token, xid, mail, change_ip):
+    url = 'http://user.mypikpak.com/v1/auth/verification'
     body = {
         "email": mail,
         "target": "ANY",
@@ -359,21 +126,16 @@ async def verification(captcha_token, xid, mail):
         'x-platform-version': '1',
         'x-protocol-version': '301',
         'x-provider-name': 'NONE',
-        'x-sdk-version': '6.0.0'
+        'x-sdk-version': '6.0.0',
+        'X-Forwarded-For': str(change_ip)
     }
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=body, headers=headers, ssl=False, proxy=PROXY) as response:
-            response_data = await response.json()
-            if DEBUG_MODE:
-                print('发送验证码:')
-                print_json(json.dumps(response_data, indent=4))
-            if response_data['error'] != 'captcha_invalid':
-                return response_data, True
-            return response_data, False
 
-
-async def verify(xid, verification_id, code):
-    url = 'https://user.mypikpak.com/v1/auth/verification/verify'
+    response = requests.post(url, json=body, headers=headers)
+    response_data = response.json()
+    print('发送验证码中......')
+    return response_data
+def verify(xid, verification_id, code, change_ip):
+    url = 'http://user.mypikpak.com/v1/auth/verification/verify'
     body = {
         "verification_id": verification_id,
         "verification_code": code,
@@ -406,24 +168,20 @@ async def verify(xid, verification_id, code):
         'x-platform-version': '1',
         'x-protocol-version': '301',
         'x-provider-name': 'NONE',
-        'x-sdk-version': '6.0.0'
+        'x-sdk-version': '6.0.0',
+        'X-Forwarded-For': str(change_ip)
     }
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=body, headers=headers, ssl=False, proxy=PROXY) as response:
-            response_data = await response.json()
-            if DEBUG_MODE:
-                print('验证码验证结果:')
-                print_json(json.dumps(response_data, indent=4))
-            return response_data
-
-
-async def signup(xid, mail, code, verification_token):
-    url = 'https://user.mypikpak.com/v1/auth/signup'
+    response = requests.post(url, json=body, headers=headers)
+    response_data = response.json()
+    print('验证码验证结果中......')
+    return response_data
+def signup(xid, mail, code, verification_token, change_ip):
+    url = 'http://user.mypikpak.com/v1/auth/signup'
     body = {
         "email": mail,
         "verification_code": code,
         "verification_token": verification_token,
-        "password": "linyuan666",
+        "password": "QWer123..",
         "client_id": "YvtoWO6GNHiuCl7x"
     }
     headers = {
@@ -431,7 +189,7 @@ async def signup(xid, mail, code, verification_token):
         'content-length': str(len(json.dumps(body))),
         'accept': '*/*',
         'accept-encoding': 'gzip, deflate, br',
-        'referer': 'https://pc.mypikpak.com',
+        'referer': 'http://pc.mypikpak.com',
         'sec-fetch-dest': 'empty',
         'sec-fetch-mode': 'cors',
         'sec-fetch-site': 'cross-site',
@@ -453,18 +211,14 @@ async def signup(xid, mail, code, verification_token):
         'x-platform-version': '1',
         'x-protocol-version': '301',
         'x-provider-name': 'NONE',
-        'x-sdk-version': '6.0.0'
+        'x-sdk-version': '6.0.0',
+        'X-Forwarded-For': str(change_ip)
     }
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=body, headers=headers, ssl=False, proxy=PROXY) as response:
-            response_data = await response.json()
-            if DEBUG_MODE:
-                print('注册结果:')
-                print_json(json.dumps(response_data, indent=4))
-            return response_data
-
-
-async def init1(xid, access_token, sub, sign, t):
+    response = requests.post(url, json=body, headers=headers)
+    response_data = response.json()
+    print('验证注册结果中......')
+    return response_data
+def init1(xid, access_token, sub, sign, t, change_ip):
     url = 'https://user.mypikpak.com/v1/shield/captcha/init'
     body = {
         "client_id": "YvtoWO6GNHiuCl7x",
@@ -495,8 +249,8 @@ async def init1(xid, access_token, sub, sign, t):
         'sec-ch-ua': '" Not A;Brand";v="99", "Chromium";v="100"',
         'sec-ch-ua-mobile': '?0',
         'sec-ch-ua-platform': '"Windows"',
-        'x-client-id': 'YcrttD06T9PIkqAY',
-        'x-client-version': '2181110017',
+        'x-client-id': 'YvtoWO6GNHiuCl7x',
+        'x-client-version': '2.3.2.4101',
         'x-device-id': xid,
         'x-device-model': 'electron%2F18.3.15',
         'x-device-name': 'PC-Electron',
@@ -506,18 +260,15 @@ async def init1(xid, access_token, sub, sign, t):
         'x-platform-version': '1',
         'x-protocol-version': '301',
         'x-provider-name': 'NONE',
-        'x-sdk-version': '6.0.0'
+        'x-sdk-version': '6.0.0',
+        'X-Forwarded-For': str(change_ip)
     }
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=body, headers=headers, ssl=False, proxy=PROXY) as response:
-            response_data = await response.json()
-            if DEBUG_MODE:
-                print('二次安全验证:')
-                print_json(json.dumps(response_data, indent=4))
-            return response_data
 
-
-async def invite(access_token, captcha_token, xid):
+    response = requests.post(url, json=body, headers=headers)
+    response_data = response.json()
+    print('通过二次安全验证中......')
+    return response_data
+def invite(access_token, captcha_token, xid, change_ip):
     url = 'https://api-drive.mypikpak.com/vip/v1/activity/invite'
     body = {
         "apk_extra": {
@@ -545,22 +296,18 @@ async def invite(access_token, captcha_token, xid):
         'x-client-id': 'YvtoWO6GNHiuCl7x',
         'x-client-version': '2.3.2.4101',
         'x-device-id': xid,
-        'x-system-language': 'zh-CN'
+        'x-system-language': 'zh-CN',
+        'X-Forwarded-For': str(change_ip)
     }
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=body, headers=headers, ssl=False, proxy=PROXY) as response:
-            response_data = await response.json()
-            if DEBUG_MODE:
-                print('获取邀请:')
-                print_json(json.dumps(response_data, indent=4))
-            return response_data
-
-
-async def init2(xid, access_token, sub, sign, t):
+    response = requests.post(url, json=body, headers=headers)
+    response_data = response.json()
+    print('确认邀请')
+    return response_data
+def init2(xid, access_token, sub, sign, t, change_ip):
     url = 'https://user.mypikpak.com/v1/shield/captcha/init'
     body = {
         "client_id": "YvtoWO6GNHiuCl7x",
-        "action": "POST:/vip/v1/order/activation-code",
+        "action": "post:/vip/v1/order/activation-code",
         "device_id": xid,
         "captcha_token": access_token,
         "meta": {
@@ -568,7 +315,7 @@ async def init2(xid, access_token, sub, sign, t):
             "client_version": "undefined",
             "package_name": "mypikpak.com",
             "user_id": sub,
-            "timestamp": t
+            "timestamp": t,
         },
     }
     headers = {
@@ -598,19 +345,16 @@ async def init2(xid, access_token, sub, sign, t):
         'x-platform-version': '1',
         'x-protocol-version': '301',
         'x-provider-name': 'NONE',
-        'x-sdk-version': '6.0.0'
+        'x-sdk-version': '6.0.0',
+        'X-Forwarded-For': str(change_ip)
     }
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=body, headers=headers, ssl=False, proxy=PROXY) as response:
-            response_data = await response.json()
-            if DEBUG_MODE:
-                print('三次安全验证:')
-                print_json(json.dumps(response_data, indent=4))
-            return response_data
 
-
-async def activation_code(access_token, captcha, xid, in_code):
-    url = 'https://api-drive.mypikpak.com/vip/v1/order/activation-code'
+    response = requests.post(url, json=body, headers=headers)
+    response_data = response.json()
+    print('通过三次次安全验证中.......')
+    return response_data
+def activation_code(access_token, captcha, xid, in_code, change_ip):
+    url = 'http://api-drive.mypikpak.com/vip/v1/order/activation-code'
     body = {
         "activation_code": in_code,
         "page": "invite"
@@ -636,88 +380,205 @@ async def activation_code(access_token, captcha, xid, in_code):
         'x-client-id': 'YvtoWO6GNHiuCl7x',
         'x-client-version': '2.3.2.4101',
         'x-device-id': xid,
-        'x-system-language': 'zh-CN'
+        'x-system-language': 'zh-CN',
+        'X-Forwarded-For': str(change_ip)
     }
-
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=body, headers=headers, ssl=False, proxy=PROXY) as response:
-                    response_data = await response.json()
-                    if DEBUG_MODE:
-                        print('填写邀请:')
-                        print_json(json.dumps(response_data, indent=4))
-                    return response_data
-        except Exception as error:
-            print('Error:', error)
-            raise error
-
-
-async def main(incode):
-    global PUSH_MSG
-    try:
-        start_time = time.time()
-        xid = str(uuid.uuid4()).replace("-", "")
-        mail = await get_mail()
-        Init = await init(xid, mail)
-        while True:
-            print('验证滑块中...')
-            img_info = await get_image(xid)
-            if img_info['response_data']['result'] == 'accept':
-                print('验证通过!!!')
-                break
+    response = requests.post(url, json=body, headers=headers)
+    response_data = response.json()
+    print('开始填写你的邀请码......')
+    print(json.dumps(response_data, indent=4))
+    return response_data
+def choose_email(EMAIL_CHOSSE):
+    # 如果EMAIL_CHOSSE等于1，则创建一个EMail对象，并打印出邮箱地址
+    if EMAIL_CHOSSE == 1:
+        email = EMail()
+        print(f'邮箱：{str(email)}')
+        return email
+    # 如果EMAIL_CHOSSE等于2，则调用requests库的post方法，向服务器发送请求，创建一个新的邮箱
+    elif EMAIL_CHOSSE == 2:
+        json_data = {
+            "min_name_length": 10,
+            "max_name_length": 10
+        }
+        url = 'https://api.internal.temp-mail.io/api/v3/email/new'
+        response = requests.post(url, json=json_data)
+        response_data = response.json()
+        mail = response_data['email']
+        print(f'获取邮箱:{mail}')
+        return mail
+    # 如果EMAIL_CHOSSE等于3，则使用random库生成一个随机邮箱
+    elif EMAIL_CHOSSE == 3:
+        mail = ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
+        mail = str(mail)+'@isco.eu.org'
+        print(f'获取邮箱:{mail}')
+        return mail
+    # 如果EMAIL_CHOSSE等于4，则使用str方法将EMail对象转换为字符串，并分割@符号，取第一个值作为用户名，剩余值作为邮箱名
+    elif EMAIL_CHOSSE == 4:
+        name = str(EMail()).split('@')[0]
+        # user是邮箱@前面的字符，例如我的是zsan60591@gmail.com
+        user = 'zsan60591'
+        mail = user+'+'+name+'@gmail.com'
+        print(f'获取邮箱:{mail}')
+        return mail
+    elif EMAIL_CHOSSE == 5:
+        name = str(EMail()).split('@')[0]
+        # user是邮箱@前面的字符，例如我的是zsan60591@gmail.com
+        user = 'zsan60591'
+        mail = user + "+" + name + "@outlook.com"
+        print(f'获取邮箱:{mail}')
+        return mail
+    # 如果EMAIL_CHOSSE不等于1、2、3、4，则打印出提示信息
+    else:
+        print('哥们，把你的邮箱接口加上, ok？')
+        return None
+def get_emailcode(EMAIL_CHOSSE, mail, max_retries=10, delay=1):
+    '''
+    根据EMAIL_CHOSSE的值获取对应邮箱的验证码
+    :param EMAIL_CHOSSE: 1为使用SMTP服务获取验证码，2为使用Temp-mail获取验证码，3为使用Sunls获取验证码，4为手动输入
+    :param mail: 邮箱地址
+    :param max_retries: 最大重试次数
+    :param delay: 每次重试的延迟时间
+    :return: 返回获取到的验证码
+    '''
+    if EMAIL_CHOSSE == 1:
+        msg = mail.wait_for_message(timeout=60000)
+        rule = r'<h2>(.*?)</h2>'
+        code = re.findall(rule, str(msg))[0]
+        print(f'获取邮箱验证码:{code}')
+        return code
+    elif EMAIL_CHOSSE == 2:
+        retries = 0
+        while retries < max_retries:
+            url = f'https://api.internal.temp-mail.io/api/v3/email/{mail}/messages'
+            response = requests.get(url)
+            html = response.json()
+            if html:
+                text = (html[0])['body_text']
+                code = re.search('\\d{6}', text).group()
+                print(f'获取邮箱验证码:{code}')
+                return code
             else:
-                print('验证失败, 重新验证滑块中...')
-        retries = 5
-        while retries > 0:
-            captcha_token_info = await get_new_token(img_info, xid, Init['captcha_token'])
-            verification_id, verification_pass = await verification(captcha_token_info['captcha_token'], xid, mail)
-            if verification_pass:
-                break
-            retries -= 1
-            time.sleep(random.randint(1, 5))
-        code = await get_code(mail)
-        verification_response = await verify(xid, verification_id['verification_id'], code)
-        signup_response = await signup(xid, mail, code, verification_response['verification_token'])
+                time.sleep(delay)
+                retries += 1
+        print("获取邮箱邮件内容失败，未收到邮件...")
+        return None
+    elif EMAIL_CHOSSE == 3:
+        retries = 0
+        while retries < max_retries:
+            response = requests.get(f"https://mail.sunls.de/api/mail?to={mail}")
+            mails = response.json()
+            for mail in mails:
+                if mail["from"]["address"] == "noreply@accounts.mypikpak.com":
+                    uid = mail["uid"]
+                    break
+            else:
+                time.sleep(delay)
+                retries += 1
+                continue
+
+            detail_response = requests.get(f"https://mail.sunls.de/api/detail?uid={uid}")
+            html_content = detail_response.json()["__html"]
+            match = re.search(r'\b\d{6}\b', html_content)
+            if match:
+                verification_code = match.group()
+                print(f'邮箱验证码 {verification_code}')
+                return verification_code
+            else:
+                time.sleep(delay)
+                retries += 1
+        print("获取邮箱邮件内容失败，未收到邮件...")
+        return None
+    elif EMAIL_CHOSSE == 4:
+        code = input('输入收到的验证码')
+        return code
+    else:
+        print('哥们，把你的验证码接口加上, ok？')
+        return None
+def get_change_ip():
+    m = random.randint(0, 255)
+    n = random.randint(0, 255)
+    x = random.randint(0, 255)
+    y = random.randint(0, 255)
+    randomIP = str(m) + '.' + str(n) + '.' + str(x) + '.' + str(y)
+    return randomIP
+def geturl(captcha_token, xid):
+    url = f'https://user.mypikpak.com/captcha/v2/reCaptcha.html?action=POST%3A%2Fv1%2Fauth%2Fverification&appName=NONE&appid=XBASE&captcha_token={captcha_token}&clientVersion=NONE&client_id=YUMx5nI8ZU8Ap8pm&creditkey={captcha_token}&credittype=1&device_id={xid}&deviceid={xid}&event=xbase-auth-verification&hl=zh-CN&mainHost=user.mypikpak.com&platformVersion=NONE&privateStyle=&redirect_uri=https%3A%2F%2Fmypikpak.com%2Floading&state=getcaptcha{str(int(time.time()*1000))}'
+    return url
+# 开始主进程
+def main(incode, EMAIL_CHOOSE):
+    # 开始计时
+    try:
+        change_ip = get_change_ip()
+        # change_ip = '127.0.0.1'
+        start_time = time.time()
+        print(f'程序开始运行')
+        # 生成唯一标识符
+        xid = str(uuid.uuid4()).replace('-', '')
+        # 选择邮箱
+        email = choose_email(EMAIL_CHOOSE)
+        mail = str(email)
+        # 初始化
+        Init = init(xid, mail, change_ip)
+        captcha_token_info = geturl(Init['captcha_token'], xid)
+        print(f'请在浏览器打开网址，然后手动过滑块然后复制过滑块过后的url里面的captcha_token ， 网址是：  {captcha_token_info}  ')
+        captcha_token = input('请输入你获取的captcha_token:  ')
+        # 验证
+        Verification = verification(captcha_token, xid, mail, change_ip)
+        # 获取邮箱验证码
+        code = get_emailcode(EMAIL_CHOOSE, email)
+        # 验证
+        verification_response = verify(xid, Verification['verification_id'], code, change_ip)
+        # 注册
+        signup_response = signup(xid, mail, code, verification_response['verification_token'], change_ip)
+        # 当前时间
         current_time = str(int(time.time()))
-        sign = await get_sign(xid, current_time)
-        init1_response = await init1(xid, signup_response['access_token'], signup_response['sub'], sign, current_time)
-        await invite(signup_response['access_token'], init1_response['captcha_token'], xid)
-        init2_response = await init2(xid, signup_response['access_token'], signup_response['sub'], sign, current_time)
-        activation = await activation_code(signup_response['access_token'], init2_response['captcha_token'], xid,
-                                           incode)
+        # 获取签名
+        sign = get_sign(xid, current_time)
+        # 初始化1
+        init1_response = init1(xid, signup_response['access_token'], signup_response['sub'], sign, current_time, change_ip)
+        # 邀请
+        invite(signup_response['access_token'], init1_response['captcha_token'], xid, change_ip)
+        # 初始化2
+        init2_response = init2(xid, signup_response['access_token'], signup_response['sub'], sign, current_time, change_ip)
+        # 激活
+        activation = activation_code(signup_response['access_token'], init2_response['captcha_token'], xid,
+                                     incode, change_ip)
+        # 结束计时
         end_time = time.time()
-        run_time = f"{(end_time - start_time):.2f}"
-        if activation['add_days'] == 5:
-            print(f'邀请码: {incode} ==> 邀请成功, 用时: {run_time} 秒')
-            print(f'邮箱: {mail}')
-            print(f'密码: linyuan666')
-            PUSH_MSG += f'邀请码: {incode} ==> 邀请成功\n邮箱: {mail}\n密码: linyuan666\n'
-            return
-        else:
-            print(f'邀请码: {incode} ==> 邀请失败, 用时: {run_time} 秒')
-            PUSH_MSG += f'邀请码: {incode} ==> 邀请失败\n'
-        # input('按回车键再次邀请!!!')
-        await main(incode)
+        run_time = f'{(end_time - start_time):.2f}'
+        try:
+            # 判断激活是否成功
+            if activation['add_days'] == 5:
+                print(f'邀请码: {incode} => 邀请成功, 运行时间: {run_time}秒')
+                print(f'邀请邮箱: {mail}\n邮箱密码: QWer123..')
+            elif activation['add_days'] == 0:
+                print(f'邀请码: {incode} => 邀请失败, 运行时间: {run_time}秒')
+            else:
+                print(f'程序异常请重试!!!, 运行时间: {run_time}秒')
+        except:
+            print('检查你的邀请码是否有效!!!')
+        # 等待用户按回车键
+        input('按回车键再次邀请...')
+        # 再次运行主函数
+        main(incode, EMAIL_CHOOSE)
+    # 捕获异常
     except Exception as e:
-        if '环境变量' in str(e):
-            return
-        print(f'异常捕获:{e}')
-        PUSH_MSG += f'邀请异常:{e}\n'
-        # print('请检查网络环境,(开启科学上网)重试!!!')
-        # input('按回车键重试!!!')
-        # await main()
-
-
-async def run():
-    global PUSH_MSG
-    invite_code_list = check_env()
-    for i in range(len(invite_code_list)):
-        print(f'=========正在邀请第 {i + 1} 个邀请码=========')
-        PUSH_MSG += f'=========第 {i + 1} 个邀请码=========\n'
-        invite_code = invite_code_list[i]
-        await main(invite_code)
-    await push(PUSH_MSG)
-
-
-asyncio.run(run())
+        print('异常捕获:', e)
+        input('按回车键重试...')
+        main(incode, EMAIL_CHOOSE)
+        return 0
+if __name__ == '__main__':
+    #设置系统代理
+    #os.environ['HTTP_PROXY'] = 'http://127.0.0.1:7890'
+    #os.environ['HTTPS_PROXY'] = 'http://127.0.0.1:7890'
+    print('作者：1930520970 白栀')
+    print('赞助码：https://krseoul.imgtbl.com/i/2024/07/24/66a0e82a09d17.png')
+    print("杂货铺：http://47.109.38.135/")
+    print('手动获取token版，使用请看运行提示，电信流量可以直接使用，其他的请连外网')
+    print('请勿倒卖滥用')
+    # 有三个邮箱接口,EMAIL_CHOOSE默认为1,自行测试!!!
+    EMAIL_CHOOSE = 1
+    # 获取用户输入的邀请码
+    incode = os.getenv('INVITE_CODE') or input('请输入邀请码:')
+    # 调用main函数，传入邀请码和EMAIL_CHOOSE变量
+    main(incode, EMAIL_CHOOSE)
