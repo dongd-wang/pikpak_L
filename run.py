@@ -178,9 +178,9 @@ async def get_code(mail, max_retries=10, delay=1):
                     print(f'获取邮箱验证码:{code}')
                     return code
                 else:
-                    time.sleep(delay)
+                    time.sleep(2**delay)
                     retries += 1
-    print("获取邮箱邮件内容失败，未收到邮件...")
+    print(f"获取邮箱邮件内容失败，未收到邮件... {mail}")
     return None
 
 
